@@ -1,3 +1,6 @@
+# exported builds
+builds/
+
 # godot_ai MCP editor plugin (dev tooling, not game content)
 addons/godot_ai/
 addons/.godot_ai_update/

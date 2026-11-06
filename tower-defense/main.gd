@@ -206,6 +206,7 @@ var squad_detail_title: Label
 var squad_detail_role: Label
 var squad_detail_stats: Label
 var squad_detail_skill: Label
+var squad_slot_panel: Panel
 var unit_panel: Panel
 var unit_avatar: TextureRect
 var unit_title: Label
@@ -729,54 +730,105 @@ func show_squad():
 	squad_tab_buttons.clear()
 	squad.sort_custom(compare_operators)
 
-	# Header & counter
-	label("PILIH SQUAD", Vector2(52, 16), 26)
-	squad_count = label("", Vector2(52, 44), 15)
+	var vp = get_viewport_rect().size
+	# Layout constants
+	var HEADER_H  = 64.0
+	var SLOT_H    = 72.0
+	var DETAIL_H  = 120.0
+	var FILTER_H  = 40.0
+	var FOOTER_H  = 64.0
+	var CARD_W    = 200.0
+	var CARD_H    = 80.0
+	var CARD_GAP  = 8.0
+	var COLS      = 5
+	var PAD       = 16.0
 
-	# Role counts
+	# ── Header ──────────────────────────────────────────────────────────────
+	var hdr = ui_panel(Vector2(0, 0), Vector2(vp.x, HEADER_H), COL_PANEL_BORDER)
+	hdr.add_theme_stylebox_override("panel", card_box(Color("#0a0f1a"), COL_PANEL_BORDER))
+	var hdr_title = panel_label(hdr, "PILIH SQUAD", Vector2(PAD, 8), 28)
+	hdr_title.add_theme_color_override("font_color", COL_ACCENT)
+	squad_count = panel_label(hdr, "", Vector2(PAD, 40), 13)
+	squad_count.add_theme_color_override("font_color", COL_TEXT_DIM)
+
+	# ── Squad slot bar (dibangun ulang tiap refresh) ────────────────────────
+	var slot_y = HEADER_H + 4.0
+	squad_slot_panel = ui_panel(Vector2(0, slot_y), Vector2(vp.x, SLOT_H), COL_PANEL_BORDER)
+	squad_slot_panel.add_theme_stylebox_override("panel", card_box(Color("#0d1520"), COL_PANEL_BORDER))
+
+	# ── Detail panel karakter yang sedang di-inspect ──────────────────────────
+	if inspected < 0:
+		inspected = squad[0] if not squad.is_empty() else 0
+	var detail_y = slot_y + SLOT_H + 4.0
+	var DETAIL_H_REAL = 110.0
+	squad_detail_panel = ui_panel(Vector2(0, detail_y), Vector2(vp.x, DETAIL_H_REAL), COLORS[ROLES[inspected]])
+	squad_detail_panel.add_theme_stylebox_override("panel", card_box(Color("#0f1826"), COLORS[ROLES[inspected]]))
+	squad_detail_avatar = ui_avatar(squad_detail_panel, Vector2(PAD, 8), 90)
+	var det_x = PAD + 100.0
+	squad_detail_title = panel_label(squad_detail_panel, "", Vector2(det_x, 6), 20)
+	squad_detail_role  = panel_label(squad_detail_panel, "", Vector2(det_x, 32), 13)
+	squad_detail_stats = panel_label(squad_detail_panel, "", Vector2(det_x, 54), 12)
+	squad_detail_stats.add_theme_color_override("font_color", COL_TEXT_DIM)
+	squad_detail_skill = panel_label(squad_detail_panel, "", Vector2(det_x, 76), 12)
+	squad_detail_skill.add_theme_color_override("font_color", COL_ACCENT)
+	var badge_lbl = panel_label(squad_detail_panel, "", Vector2(vp.x - 230.0, 42), 14)
+	badge_lbl.name = "SquadBadge"
+
+	var filter_y = detail_y + DETAIL_H_REAL + 4.0
 	var role_counts = [0, 0, 0, 0]
 	for r in ROLES:
 		role_counts[r] += 1
-
-	# Filter tabs (Semua, Striker, Guardian, Caster, Supporter)
 	var tabs_data = [
-		{"role": -1, "title": "Semua (%d)" % OPERATORS.size(), "color": COL_TEXT},
-		{"role": 0, "title": "Striker (%d)" % role_counts[0], "color": COLORS[0]},
-		{"role": 1, "title": "Guardian (%d)" % role_counts[1], "color": COLORS[1]},
-		{"role": 2, "title": "Caster (%d)" % role_counts[2], "color": COLORS[2]},
-		{"role": 3, "title": "Supporter (%d)" % role_counts[3], "color": COLORS[3]},
+		{"role": -1, "title": "Semua", "color": COL_TEXT},
+		{"role": 0,  "title": "Striker",   "color": COLORS[0]},
+		{"role": 1,  "title": "Guardian",  "color": COLORS[1]},
+		{"role": 2,  "title": "Caster",    "color": COLORS[2]},
+		{"role": 3,  "title": "Supporter", "color": COLORS[3]},
 	]
-
+	var tab_w = 140.0
+	var tab_gap = 6.0
+	var tab_total = tabs_data.size() * tab_w + (tabs_data.size() - 1) * tab_gap
+	var tab_x0 = floorf((vp.x - tab_total) * 0.5)
 	for t in tabs_data.size():
-		var t_data = tabs_data[t]
-		var at = Vector2(52 + t * 235, 70)
-		var btn = button(t_data.title, at, select_squad_filter.bind(t_data.role), Vector2(225, 32))
-		btn.add_theme_font_size_override("font_size", 12)
+		var td = tabs_data[t]
+		var is_active = (squad_filter_role == td.role)
+		var at = Vector2(tab_x0 + t * (tab_w + tab_gap), filter_y)
+		var btn = button(td.title, at, select_squad_filter.bind(td.role), Vector2(tab_w, FILTER_H - 4))
+		btn.add_theme_font_size_override("font_size", 13)
 		btn.toggle_mode = true
-		var is_active = (squad_filter_role == t_data.role)
 		btn.set_pressed_no_signal(is_active)
-		btn.modulate = t_data.color if is_active else Color("#6b7d94")
+		var tab_fill = Color(td.color, 0.22) if is_active else Color("#0d1520")
+		var tab_border = td.color if is_active else COL_PANEL_BORDER
+		var tab_box = card_box(tab_fill, tab_border)
+		tab_box.set_border_width_all(2 if is_active else 1)
+		btn.add_theme_stylebox_override("normal", tab_box)
+		btn.add_theme_stylebox_override("hover", card_box(Color(td.color, 0.15), td.color.lightened(0.2)))
+		btn.add_theme_color_override("font_color", td.color if is_active else COL_TEXT_DIM)
 		squad_tab_buttons.append(btn)
 
-	if inspected < 0:
-		inspected = squad[0] if not squad.is_empty() else 0
-	squad_detail_panel = ui_panel(Vector2(52, 110), Vector2(1176, 92), COLORS[ROLES[inspected]])
-	squad_detail_avatar = ui_avatar(squad_detail_panel, Vector2(10, 8), 76)
-	squad_detail_title = panel_label(squad_detail_panel, "", Vector2(98, 6), 24)
-	squad_detail_role = panel_label(squad_detail_panel, "", Vector2(98, 40), 15)
-	squad_detail_stats = panel_label(squad_detail_panel, "", Vector2(98, 64), 13)
-	squad_detail_skill = panel_label(squad_detail_panel, "", Vector2(600, 40), 13)
-	squad_detail_stats.modulate = COL_TEXT_DIM
-	squad_detail_skill.modulate = COL_ACCENT
+	# ── Operator cards grid (scrollable) ─────────────────────────────────────
+	var grid_y    = filter_y + FILTER_H + 6.0
+	var grid_h    = vp.y - grid_y - FOOTER_H
+	var scroll    = ScrollContainer.new()
+	scroll.position = Vector2(0, grid_y)
+	scroll.size     = Vector2(vp.x, grid_h)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode   = ScrollContainer.SCROLL_MODE_AUTO
+	ui.add_child(scroll)
+	var grid_content = Control.new()
+	grid_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(grid_content)
 
-	# Build cards grouped by role and sorted alphabetically by name
 	var roles_to_show: Array[int] = []
 	if squad_filter_role == -1:
 		roles_to_show = [0, 1, 2, 3]
 	else:
 		roles_to_show = [squad_filter_role]
 
-	var curr_y = 210
+	var total_w = COLS * CARD_W + (COLS - 1) * CARD_GAP
+	var grid_x0 = floorf((vp.x - total_w) * 0.5)
+	var curr_y  = 6.0   # relative inside scroll content
+
 	for r in roles_to_show:
 		var role_ops: Array[int] = []
 		for id in OPERATORS.size():
@@ -785,32 +837,59 @@ func show_squad():
 		role_ops.sort_custom(func(a: int, b: int) -> bool:
 			return OPERATORS[a][0] < OPERATORS[b][0]
 		)
-
-		# Role section title
-		var r_header = label("• %s • (%d Operator)" % [ROLE_NAMES[r].to_upper(), role_ops.size()], Vector2(52, curr_y), 15)
-		r_header.modulate = COLORS[r]
-		curr_y += 22
+		# Role header — added to scroll content
+		var r_hdr       = Label.new()
+		r_hdr.text      = "▸  %s  (%d)" % [ROLE_NAMES[r].to_upper(), role_ops.size()]
+		r_hdr.position  = Vector2(grid_x0, curr_y)
+		r_hdr.add_theme_font_size_override("font_size", 13)
+		r_hdr.add_theme_color_override("font_color", COLORS[r])
+		r_hdr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		grid_content.add_child(r_hdr)
+		curr_y += 22.0
 
 		for i in role_ops.size():
 			var op_id = role_ops[i]
-			var col = i % 4
-			var row = floori(i / 4.0)
-			var at = Vector2(52 + col * 296, curr_y + row * 72)
-			var card = button("", at, inspect_operator.bind(op_id), Vector2(288, 64))
-			card.toggle_mode = true
-			avatar_card(card, op_id, 12)
+			var col   = i % COLS
+			var row   = floori(float(i) / COLS)
+			var at    = Vector2(grid_x0 + col * (CARD_W + CARD_GAP), curr_y + row * (CARD_H + CARD_GAP))
+			# build card inside scroll content instead of ui
+			var card  = Button.new()
+			card.position           = at
+			card.custom_minimum_size = Vector2(CARD_W, CARD_H)
+			card.size               = Vector2(CARD_W, CARD_H)
+			card.toggle_mode        = true
+			card.icon               = operator_portrait(op_id)
+			card.expand_icon        = true
+			card.alignment          = HORIZONTAL_ALIGNMENT_LEFT
+			card.add_theme_font_size_override("font_size", 11)
+			card.pressed.connect(inspect_operator.bind(op_id))
+			grid_content.add_child(card)
 			squad_cards[op_id] = card
 
-		var num_rows = ceili(float(role_ops.size()) / 4.0)
-		curr_y += num_rows * 72 + 6
+		var num_rows = ceili(float(role_ops.size()) / COLS)
+		curr_y += num_rows * (CARD_H + CARD_GAP) + 10.0
 
-	button("Kembali", Vector2(52, 680), show_stages, Vector2(160, 44))
-	squad_start = button("Masuk Stage %d" % (stage_index + 1), Vector2(720, 680), start_battle, Vector2(160, 44))
+	# Update scroll content height so it scrolls correctly
+	grid_content.custom_minimum_size = Vector2(vp.x, curr_y + 8.0)
+
+	# ── Footer ────────────────────────────────────────────────────────────────
+	var footer_y = vp.y - FOOTER_H
+	var ftr = ui_panel(Vector2(0, footer_y), Vector2(vp.x, FOOTER_H), COL_PANEL_BORDER)
+	ftr.add_theme_stylebox_override("panel", card_box(Color("#0a0f1a"), COL_PANEL_BORDER))
+	var btn_back = button("← Kembali", Vector2(PAD, footer_y + 10), show_stages, Vector2(160, 44))
+	btn_back.add_theme_color_override("font_color", COL_TEXT_DIM)
+	squad_start = button(
+		"▶  Masuk Stage %d" % (stage_index + 1),
+		Vector2(vp.x - 200.0, footer_y + 10),
+		start_battle, Vector2(184, 44)
+	)
+	squad_start.add_theme_color_override("font_color", COL_SUCCESS)
 	refresh_squad()
 
 func inspect_operator(id: int):
 	inspected = id
 	toggle_squad_member(id)
+	refresh_squad()
 
 func toggle_squad_member(id: int):
 	if squad.has(id):
@@ -822,15 +901,10 @@ func toggle_squad_member(id: int):
 
 func refresh_squad():
 	var full = squad.size() == MAX_SQUAD
-	var squad_names: Array[String] = []
-	for sid in squad:
-		squad_names.append(OPERATORS[sid][0])
-	var active_text = "  •  Squad: " + ", ".join(squad_names) if not squad.is_empty() else ""
-	squad_count.text = "%d / %d Operator  •  %s%s" % [
-		squad.size(), MAX_SQUAD,
-		("Squad penuh (6/6)" if full else "Klik kartu untuk memilih"),
-		active_text
-	]
+	# Header counter
+	if is_instance_valid(squad_count):
+		var status_txt = "Squad penuh!" if full else "Klik kartu operator untuk memilih / lepas"
+		squad_count.text = "%d / %d operator dipilih  •  %s" % [squad.size(), MAX_SQUAD, status_txt]
 
 	for id in squad_cards:
 		var card: Button = squad_cards[id]
@@ -838,25 +912,124 @@ func refresh_squad():
 			continue
 		var member = squad.has(id)
 		var slot_idx = squad.find(id)
-		card.text = get_squad_card_text(id, member, slot_idx)
+		# Card text: name + role on line 1, status on line 2
+		var name_line = "%s  [%s]" % [OPERATORS[id][0], ROLE_NAMES[ROLES[id]]]
+		var status_line: String
+		if member:
+			status_line = "✓  Slot %d  •  %d PT" % [slot_idx + 1, OPERATORS[id][3]]
+		else:
+			status_line = "+ Pilih  •  %d PT" % OPERATORS[id][3]
+		card.text = name_line + "\n" + status_line
 		card.set_pressed_no_signal(member)
 		card.disabled = not member and full
-		skin_card(card, COLORS[ROLES[id]], Color("#232f1e") if member else Color("#151f2e"))
-		if id == inspected:
-			card.add_theme_stylebox_override("normal", card_box(Color("#2a2413"), COL_ACCENT))
+
+		# Style: green tint if in squad, dimmed if full and not member, gold border if inspected
+		var fill: Color
+		var border: Color
+		if id == inspected and member:
+			fill   = Color("#1e3020")
+			border = COL_ACCENT
+		elif id == inspected:
+			fill   = Color("#1e2a10")
+			border = COL_ACCENT
+		elif member:
+			fill   = Color("#132210")
+			border = COLORS[ROLES[id]]
+		elif full:
+			fill   = Color("#0f121a")
+			border = Color("#1e2530")
+		else:
+			fill   = Color("#0d1520")
+			border = COLORS[ROLES[id]].darkened(0.3)
+
+		var normal_box = card_box(fill, border)
+		card.add_theme_stylebox_override("normal", normal_box)
+		card.add_theme_stylebox_override("hover", card_box(fill.lightened(0.08), border.lightened(0.2)))
+		card.add_theme_color_override("font_color", COL_SUCCESS if member else (COL_TEXT_DIM if (full and not member) else COL_TEXT))
+		card.add_theme_color_override("font_disabled_color", Color("#2a3040"))
 
 	squad_start.disabled = squad.is_empty()
+	rebuild_slot_bar()
 	refresh_squad_detail()
 
+func rebuild_slot_bar():
+	if not is_instance_valid(squad_slot_panel):
+		return
+	# Hapus semua child lama
+	for child in squad_slot_panel.get_children():
+		child.queue_free()
+	var vp    = get_viewport_rect().size
+	var PAD   = 16.0
+	var slot_btn_w   = 100.0
+	var slot_btn_h   = 50.0
+	var slot_gap     = 6.0
+	var slot_total_w = MAX_SQUAD * slot_btn_w + (MAX_SQUAD - 1) * slot_gap
+	var slot_x0      = floorf((vp.x - slot_total_w) * 0.5)
+
+	var lbl = panel_label(squad_slot_panel,
+		"SQUAD  %d/%d  •  Klik slot untuk hapus" % [squad.size(), MAX_SQUAD],
+		Vector2(PAD, 5), 11)
+	lbl.add_theme_color_override("font_color", COL_TEXT_DIM)
+
+	for s in MAX_SQUAD:
+		var sx        = slot_x0 + s * (slot_btn_w + slot_gap)
+		var is_filled = s < squad.size()
+		var sid       = squad[s] if is_filled else -1
+
+		var slot_btn = Button.new()
+		slot_btn.position          = Vector2(sx, 18)
+		slot_btn.size              = Vector2(slot_btn_w, slot_btn_h)
+		slot_btn.custom_minimum_size = Vector2(slot_btn_w, slot_btn_h)
+		slot_btn.flat              = true
+
+		if is_filled:
+			# Karakter terpilih: border kuning emas
+			var fill   = Color(COL_ACCENT, 0.12)
+			var border = COL_ACCENT
+			slot_btn.add_theme_stylebox_override("normal",  card_box(fill, border))
+			slot_btn.add_theme_stylebox_override("hover",   card_box(Color(COL_ACCENT, 0.25), Color("#ffffff")))
+			slot_btn.pressed.connect(func():
+				squad.erase(sid)
+				inspected = sid
+				refresh_squad()
+			)
+		else:
+			slot_btn.add_theme_stylebox_override("normal", card_box(Color("#0a1020"), COL_PANEL_BORDER))
+			slot_btn.add_theme_stylebox_override("hover",  card_box(Color("#141c2b"), COL_ACCENT))
+
+		squad_slot_panel.add_child(slot_btn)
+
+		if is_filled:
+			var av = ui_avatar(slot_btn, Vector2(2, 3), 44)
+			av.texture = operator_portrait(sid)
+			var sname = panel_label(slot_btn, OPERATORS[sid][0], Vector2(48, 6), 10)
+			sname.add_theme_color_override("font_color", COL_ACCENT)
+			var srole = panel_label(slot_btn, ROLE_NAMES[ROLES[sid]], Vector2(48, 24), 9)
+			srole.add_theme_color_override("font_color", COL_TEXT_DIM)
+		else:
+			var empty_lbl = panel_label(slot_btn, "slot %d" % (s + 1), Vector2(10, 17), 10)
+			empty_lbl.add_theme_color_override("font_color", Color("#3a4558"))
+
 func refresh_squad_detail():
+	if not is_instance_valid(squad_detail_panel):
+		return
 	var accent = COLORS[ROLES[inspected]]
-	squad_detail_panel.add_theme_stylebox_override("panel", card_box(Color(0.07, 0.1, 0.16, 0.95), accent))
+	squad_detail_panel.add_theme_stylebox_override("panel", card_box(Color("#0f1826"), accent))
 	set_avatar(squad_detail_avatar, inspected)
 	squad_detail_title.text = OPERATORS[inspected][0]
-	squad_detail_role.text = "%s  •  %d POINT" % [ROLE_NAMES[ROLES[inspected]].to_upper(), OPERATORS[inspected][3]]
+	squad_detail_role.text = "%s  •  COST %d PT" % [ROLE_NAMES[ROLES[inspected]].to_upper(), OPERATORS[inspected][3]]
 	squad_detail_role.add_theme_color_override("font_color", accent)
 	squad_detail_stats.text = operator_line(inspected)
-	squad_detail_skill.text = "Skill: %s" % SKILL_NAMES[inspected]
+	squad_detail_skill.text = "⚡  Skill: %s" % SKILL_NAMES[inspected]
+	var badge = squad_detail_panel.get_node_or_null("SquadBadge")
+	if badge:
+		if squad.has(inspected):
+			badge.text = "✓  Dalam Squad  (Slot %d)" % (squad.find(inspected) + 1)
+			badge.add_theme_color_override("font_color", COL_SUCCESS)
+		else:
+			var full = squad.size() == MAX_SQUAD
+			badge.text = "Squad penuh" if full else "—  Belum Dipilih"
+			badge.add_theme_color_override("font_color", COL_DANGER if full else COL_TEXT_DIM)
 
 func start_battle():
 	make_screen("battle")
